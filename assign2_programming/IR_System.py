@@ -8,7 +8,6 @@ import sys
 
 from PorterStemmer import PorterStemmer
 
-
 class IRSystem:
 
     def __init__(self):
@@ -154,9 +153,7 @@ class IRSystem:
         for word in self.vocab:
             for d in range(len(self.docs)):
                 if word not in self.tfidf:
-                    self.tfidf[word] = {}
-                self.tfidf[word][d] = 0.0
-            count -= 1
+                    self.tfidf[word] = collections.defaultdict(lambda: 0.0)
             
         count = len(self.docs)
         
@@ -216,7 +213,7 @@ class IRSystem:
             inv_index[word] = []
         
         for doc_idx in range(0, len(self.docs)):
-            title = self.title[doc_idx]
+            title = self.titles[doc_idx]
             for word in self.docs[doc_idx]:
                 inv_index[word].append(title)
                 
@@ -233,7 +230,7 @@ class IRSystem:
 
         # ------------------------------------------------------------------
         # TODO: return the list of postings for a word. Right Now it just returns empty list.
-        posting = []
+        posting = set([])
         
         indices = self.inv_index[word]
         
@@ -299,14 +296,39 @@ class IRSystem:
 
         # Right now, this code simply gets the score by taking the Jaccard
         # similarity between the query and every document.
-        words_in_query = set()
-        for word in query:
-            words_in_query.add(word)
+        wtq_cnt = collections.Counter(query)
+
+        all_doc_counters = {}
+
+        lendocs = {}
+        for d, doc in enumerate(self.docs):
+            doc_counters = collections.Counter(doc)
+            all_doc_counters[d] = doc_counters
+            
+            lendoc = 0.0
+            for w in doc_counters:
+                wtdt = self.get_tfidf(w, d)
+                lendoc += wtdt * wtdt
+            lendocs[d] = lendoc
+
+        for t in wtq_cnt:
+            cnt = wtq_cnt[t]
+
+            wtqt = 1.0 + math.log(float(cnt), 10)
+
+            postings = self.get_posting(t) # list of document indices for the word
+            for d in postings:
+                doc = self.docs[d]
+
+                doccount = all_doc_counters[d][t]
+                wtdt = self.get_tfidf(t, d)
+                scores[d] += wtdt * wtqt
 
         for d, doc in enumerate(self.docs):
-            words_in_doc = set(doc)
-            scores[d] = len(words_in_query.intersection(words_in_doc)) \
-                    / float(len(words_in_query.union(words_in_doc)))
+            lendoc = lendocs[d]
+            if lendoc > 0:
+                scores[d] = scores[d] / math.sqrt(lendoc)
+       
 
         # ------------------------------------------------------------------
 
